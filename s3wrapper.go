@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -31,27 +32,53 @@ func (c *S3Wrapper) FetchAllKeys() error {
 		Prefix: &c.keyPrefix,
 	}
 
-	err := c.s3Svc.ListObjectsV2Pages(&inputParam,
-		func(page *s3.ListObjectsV2Output, lastPage bool) bool {
-			go c.addContentsToCache(page.Contents)
+	objChan := make(chan *s3.Object, 2000)
 
-			return !lastPage
-		})
+	var wg sync.WaitGroup
 
-	if err != nil {
-		logger.Errorw(err.Error())
-		return err
-	}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		err := c.s3Svc.ListObjectsV2Pages(&inputParam,
+			func(page *s3.ListObjectsV2Output, lastPage bool) bool {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+
+					for _, c := range page.Contents {
+						objChan <- c
+					}
+				}()
+				return !lastPage
+			})
+
+		if err != nil {
+			logger.Errorw(err.Error())
+			panic(err.Error())
+		}
+	}()
+
+	go func() {
+		for {
+			o, ok := <-objChan
+
+			if !ok {
+				return
+			}
+
+			etag := strings.Replace(*o.ETag, "\"", "", 2)
+
+			c.oFlag.Lock()
+			c.objects[*o.Key] = &etag
+			c.oFlag.Unlock()
+		}
+	}()
+
+	wg.Wait()
+	close(objChan)
 
 	return nil
-}
-
-func (c *S3Wrapper) addContentsToCache(contents []*s3.Object) {
-	for _, content := range contents {
-		c.oFlag.Lock()
-		c.objects[*content.Key] = content.ETag
-		c.oFlag.Unlock()
-	}
 }
 
 func (c *S3Wrapper) PutObject(filePath string, key string) (*s3.PutObjectOutput, error) {

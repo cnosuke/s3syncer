@@ -90,7 +90,6 @@ func stderrLog(format string, a ...interface{}) {
 }
 
 func main() {
-
 	var fromPath, toBucket, toKeyPrefix, logOutPut string
 	var cpConcurrency int
 
