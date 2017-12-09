@@ -2,3 +2,5 @@ dist/*
 bin/*
 .idea/*
 logs
+vendor/*
+projectFilesBackup/*
