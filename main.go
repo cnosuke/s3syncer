@@ -19,8 +19,8 @@ var Version = "0.0.0"
 var Revision = "xxx"
 
 var logger *zap.SugaredLogger
-var DryRun bool
-var SuppressStderrLogs bool
+var doFlg bool
+var suppressStderrLogs bool
 
 type AWS_CP_FLAG int
 
@@ -65,7 +65,7 @@ func copyWorker(wg *sync.WaitGroup, rootDir string, fileList chan string, s3Wrap
 		} else {
 			opType = "copy"
 			statusChan <- AWS_CP_COPY
-			if !DryRun {
+			if doFlg {
 				_, err := s3Wrapper.PutObject(fromPath, toPath)
 				if err != nil {
 					logger.Errorw(err.Error())
@@ -84,7 +84,7 @@ func copyWorker(wg *sync.WaitGroup, rootDir string, fileList chan string, s3Wrap
 }
 
 func stderrLog(format string, a ...interface{}) {
-	if !SuppressStderrLogs {
+	if !suppressStderrLogs {
 		fmt.Fprintf(os.Stderr, format, a...)
 	}
 }
@@ -121,15 +121,15 @@ func main() {
 			Value:       4,
 			Destination: &cpConcurrency,
 		},
-		cli.BoolTFlag{
+		cli.BoolFlag{
 			Name:        "do",
 			Usage:       "Exec(Default is dry-run)",
-			Destination: &DryRun,
+			Destination: &doFlg,
 		},
 		cli.BoolFlag{
 			Name:        "suppress, s",
 			Usage:       "Suppress STDERR status logs",
-			Destination: &SuppressStderrLogs,
+			Destination: &suppressStderrLogs,
 		},
 		cli.StringFlag{
 			Name:        "logs",
@@ -173,10 +173,10 @@ func main() {
 			"toBucket", toBucket,
 			"toKeyPrefix", toKeyPrefix,
 			"concurrency", cpConcurrency,
-			"dryrun", DryRun,
+			"do", doFlg,
 		)
 
-		stderrLog("Starting: fromPath=`%s`, toKeyPrefix=`%s`, concurrency=`%d`, dryrun=`%d`\n", fromPath, toKeyPrefix, cpConcurrency, DryRun)
+		stderrLog("Starting: fromPath=`%s`, toKeyPrefix=`%s`, concurrency=`%d`, do=`%v`\n", fromPath, toKeyPrefix, cpConcurrency, doFlg)
 
 		s3Session := session.Must(session.NewSession())
 
